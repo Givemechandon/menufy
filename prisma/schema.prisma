@@ -17,8 +17,25 @@ model Client {
   name      String
   slug      String   @unique
   isActive  Boolean  @default(true)
+  planId    String
+  plan      Plan     @relation(fields: [planId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([planId])
   @@map("clients")
+}
+
+model Plan {
+  id         String   @id @default(cuid())
+  name       String
+  slug       String   @unique
+  maxMenus   Int      @default(2)
+  priceCents Int      @default(0)
+  isActive   Boolean  @default(true)
+  clients    Client[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("plans")
 }
