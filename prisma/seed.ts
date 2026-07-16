@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { hash } from "bcryptjs";
 import { PrismaNeon } from "@prisma/adapter-neon";
 import { PrismaClient } from "../app/generated/prisma/client";
 
@@ -16,7 +17,7 @@ const prisma = new PrismaClient({
   adapter,
 });
 
-async function main() {
+async function createPlans() {
   const plans = [
     {
       name: "Gratuito",
@@ -43,8 +44,48 @@ async function main() {
       create: plan,
     });
   }
+}
 
-  console.log("Planos iniciais verificados com sucesso.");
+async function createSuperAdmin() {
+  const name = process.env.SEED_ADMIN_NAME;
+  const email = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
+  const password = process.env.SEED_ADMIN_PASSWORD;
+
+  if (!name || !email || !password) {
+    throw new Error("As variáveis do Super Admin não foram configuradas.");
+  }
+
+  const existingUser = await prisma.user.findUnique({
+    where: {
+      email,
+    },
+  });
+
+  if (existingUser) {
+    console.log("Super Admin já existe. Nenhuma alteração foi realizada.");
+    return;
+  }
+
+  const passwordHash = await hash(password, 12);
+
+  await prisma.user.create({
+    data: {
+      name,
+      email,
+      passwordHash,
+      role: "SUPER_ADMIN",
+      isActive: true,
+    },
+  });
+
+  console.log("Super Admin criado com sucesso.");
+}
+
+async function main() {
+  await createPlans();
+  await createSuperAdmin();
+
+  console.log("Seed concluído com sucesso.");
 }
 
 main()
