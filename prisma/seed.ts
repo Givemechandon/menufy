@@ -17,45 +17,34 @@ const prisma = new PrismaClient({
 });
 
 async function main() {
-  await prisma.plan.upsert({
-    where: {
-      slug: "free",
-    },
-    update: {
-      name: "Gratuito",
-      maxMenus: 2,
-      priceCents: 0,
-      isActive: true,
-    },
-    create: {
+  const plans = [
+    {
       name: "Gratuito",
       slug: "free",
       maxMenus: 2,
       priceCents: 0,
       isActive: true,
     },
-  });
-
-  await prisma.plan.upsert({
-    where: {
-      slug: "premium",
-    },
-    update: {
-      name: "Premium",
-      maxMenus: 20,
-      priceCents: 0,
-      isActive: true,
-    },
-    create: {
+    {
       name: "Premium",
       slug: "premium",
       maxMenus: 20,
       priceCents: 0,
       isActive: true,
     },
-  });
+  ];
 
-  console.log("Planos iniciais criados com sucesso.");
+  for (const plan of plans) {
+    await prisma.plan.upsert({
+      where: {
+        slug: plan.slug,
+      },
+      update: {},
+      create: plan,
+    });
+  }
+
+  console.log("Planos iniciais verificados com sucesso.");
 }
 
 main()
