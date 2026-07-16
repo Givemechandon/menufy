@@ -18,6 +18,11 @@ enum MenuStatus {
   ARCHIVED
 }
 
+enum UserRole {
+  SUPER_ADMIN
+  CLIENT_ADMIN
+}
+
 model Plan {
   id         String   @id @default(cuid())
   name       String
@@ -42,11 +47,30 @@ model Client {
   menus      Menu[]
   categories Category[]
   products   Product[]
+  users      User[]
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 
   @@index([planId])
   @@map("clients")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         UserRole  @default(CLIENT_ADMIN)
+  isActive     Boolean   @default(true)
+  clientId     String?
+  client       Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([clientId])
+  @@index([role])
+  @@map("users")
 }
 
 model Menu {
