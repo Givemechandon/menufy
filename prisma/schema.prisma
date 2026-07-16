@@ -12,6 +12,17 @@ datasource db {
   provider = "postgresql"
 }
 
+enum MenuTheme {
+  LIGHT
+  DARK
+}
+
+enum MenuStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 model Client {
   id        String   @id @default(cuid())
   name      String
@@ -19,6 +30,7 @@ model Client {
   isActive  Boolean  @default(true)
   planId    String
   plan      Plan     @relation(fields: [planId], references: [id])
+  menus     Menu[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -38,4 +50,23 @@ model Plan {
   updatedAt  DateTime @updatedAt
 
   @@map("plans")
+}
+
+model Menu {
+  id           String     @id @default(cuid())
+  name         String
+  slug         String     @unique
+  description  String?
+  bannerUrl    String?
+  theme        MenuTheme  @default(LIGHT)
+  primaryColor String?
+  status       MenuStatus @default(DRAFT)
+  publishedAt  DateTime?
+  clientId     String
+  client       Client     @relation(fields: [clientId], references: [id])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([clientId])
+  @@map("menus")
 }
