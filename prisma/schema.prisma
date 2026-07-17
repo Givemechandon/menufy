@@ -23,6 +23,18 @@ enum UserRole {
   CLIENT_ADMIN
 }
 
+enum AuditStatus {
+  SUCCESS
+  FAILURE
+}
+
+enum AuditSeverity {
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
+}
+
 model Plan {
   id         String   @id @default(cuid())
   name       String
@@ -48,6 +60,7 @@ model Client {
   categories Category[]
   products   Product[]
   users      User[]
+  auditLogs Auditlog[]
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 
@@ -64,6 +77,7 @@ model User {
   isActive     Boolean   @default(true)
   clientId     String?
   client       Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  auditLogs    Auditlog[]
   lastLoginAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -159,4 +173,29 @@ model MenuProduct {
   @@id([menuId, productId])
   @@index([productId])
   @@map("menu_products")
+}
+
+model AuditLog {
+  id          String        @id @default(cuid())
+  action      String
+  status      AuditStatus   @default(SUCCESS)
+  severity    AuditSeverity @default(INFO)
+  entityType  String?
+  entityId    String?
+  description String?
+  metadata    Json?
+  ipAddress   String?
+  userAgent   String?
+  requestId   String?
+  clientId    String?
+  client      Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  actorId     String?
+  actor       User?         @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now())
+
+  @@index([clientId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
 }

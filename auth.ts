@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { createAuditLog } from "@/lib/audit";
 
 type MenuFyUserRole = "SUPER_ADMIN" | "CLIENT_ADMIN";
 
@@ -62,6 +63,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const result = loginSchema.safeParse(credentials);
 
         if (!result.success) {
+          await createAuditLog({
+            action: "AUTH_LOGIN_FAILED",
+            status: "FAILURE",
+            severity: "WARNING",
+            entityType: "User",
+            description: "Tentativa de login recusada.",
+          });
+
           return null;
         }
 
@@ -78,6 +87,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
 
         if (!user || !user.isActive) {
+          await createAuditLog({
+            action: "AUTH_LOGIN_FAILED",
+            status: "FAILURE",
+            severity: "WARNING",
+            entityType: "User",
+            description: "Tentativa de login recusada.",
+          });
+
           return null;
         }
 
@@ -85,15 +102,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           user.role === "CLIENT_ADMIN" &&
           (!user.client || !user.client.isActive)
         ) {
+          await createAuditLog({
+            action: "AUTH_LOGIN_FAILED",
+            status: "FAILURE",
+            severity: "WARNING",
+            entityType: "User",
+            entityId: user.id,
+            actorId: user.id,
+            clientId: user.clientId,
+            description: "Tentativa de login em cliente inativo.",
+          });
+
           return null;
         }
 
-        const validPassword = await compare(
-          password,
-          user.passwordHash,
-        );
+        const validPassword = await compare(password, user.passwordHash);
 
         if (!validPassword) {
+          await createAuditLog({
+            action: "AUTH_LOGIN_FAILED",
+            status: "FAILURE",
+            severity: "WARNING",
+            entityType: "User",
+            entityId: user.id,
+            actorId: user.id,
+            clientId: user.clientId,
+            description: "Tentativa de login recusada.",
+          });
+
           return null;
         }
 
@@ -104,6 +140,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           data: {
             lastLoginAt: new Date(),
           },
+        });
+
+        await createAuditLog({
+          action: "AUTH_LOGIN_SUCCESS",
+          status: "SUCCESS",
+          severity: "INFO",
+          entityType: "User",
+          entityId: user.id,
+          actorId: user.id,
+          clientId: user.clientId,
+          description: "Login realizado com sucesso.",
         });
 
         return {
