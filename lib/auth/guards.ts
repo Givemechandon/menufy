@@ -1,14 +1,55 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 
-export async function requireAuthenticatedUser() {
+const getAuthenticatedUser = cache(async () => {
   const session = await auth();
 
   if (!session?.user) {
     redirect("/login");
   }
 
-  return session.user;
+  const databaseUser =
+    await prisma.user.findUnique({
+      where: {
+        id: session.user.id,
+      },
+      select: {
+        id: true,
+        role: true,
+        clientId: true,
+        isActive: true,
+        client: {
+          select: {
+            isActive: true,
+          },
+        },
+      },
+    });
+
+  if (!databaseUser || !databaseUser.isActive) {
+    redirect("/access-disabled");
+  }
+
+  if (
+    databaseUser.role === "CLIENT_ADMIN" &&
+    (!databaseUser.clientId ||
+      !databaseUser.client?.isActive)
+  ) {
+    redirect("/access-disabled");
+  }
+
+  return {
+    ...session.user,
+    id: databaseUser.id,
+    role: databaseUser.role,
+    clientId: databaseUser.clientId,
+  };
+});
+
+export async function requireAuthenticatedUser() {
+  return getAuthenticatedUser();
 }
 
 export async function requireSuperAdmin() {
@@ -32,7 +73,7 @@ export async function requireClientAdmin() {
     user.role !== "CLIENT_ADMIN" ||
     !user.clientId
   ) {
-    redirect("/login");
+    redirect("/access-disabled");
   }
 
   return {

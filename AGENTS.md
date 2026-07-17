@@ -167,6 +167,7 @@ Tenant isolation is mandatory and is enforced in application code.
 - Ask before adding a new production dependency and explain why the current stack is insufficient.
 - The Basic Auth in `proxy.ts` intentionally protects the whole site during private development. Before launch, update the matcher deliberately so published menu routes can be public without exposing admin/dashboard routes.
 - Tighten the Content Security Policy only after accounting for the actual image/storage domains and required Next.js assets.
+- The MenuFy visual identity uses red and white, inspired by modern food-delivery interfaces. Use `#EA1D2C` as the primary color, `#C91424` for hover, white surfaces, neutral gray backgrounds, dark text, Inter typography, rounded cards, and subtle shadows. Preserve MenuFy's own branding and do not copy third-party logos or layouts.
 
 ## Definition of done
 
