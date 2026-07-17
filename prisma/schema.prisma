@@ -60,7 +60,8 @@ model Client {
   categories Category[]
   products   Product[]
   users      User[]
-  auditLogs Auditlog[]
+  auditLogs  AuditLog[]
+  errorLogs  ErrorLog[]
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 
@@ -69,18 +70,19 @@ model Client {
 }
 
 model User {
-  id           String    @id @default(cuid())
+  id           String     @id @default(cuid())
   name         String
-  email        String    @unique
+  email        String     @unique
   passwordHash String
-  role         UserRole  @default(CLIENT_ADMIN)
-  isActive     Boolean   @default(true)
+  role         UserRole   @default(CLIENT_ADMIN)
+  isActive     Boolean    @default(true)
   clientId     String?
-  client       Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  auditLogs    Auditlog[]
+  client       Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  auditLogs    AuditLog[]
+  errorLogs    ErrorLog[]
   lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   @@index([clientId])
   @@index([role])
@@ -198,4 +200,34 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+model ErrorLog {
+  id          String        @id @default(cuid())
+  severity    AuditSeverity @default(ERROR)
+  source      String
+  message     String
+  stack       String?
+  code        String?
+  route       String?
+  method      String?
+  requestId   String?
+  environment String
+  release     String?
+  ipAddress   String?
+  userAgent   String?
+  clientId    String?
+  client      Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  userId      String?
+  user        User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  metadata    Json?
+  resolvedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([severity, createdAt])
+  @@index([clientId, createdAt])
+  @@index([userId, createdAt])
+  @@index([resolvedAt, createdAt])
+  @@map("error_logs")
 }
