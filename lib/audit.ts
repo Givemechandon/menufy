@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { captureAppError } from "@/lib/error-logger";
 
 type AuditStatus = "SUCCESS" | "FAILURE";
 
@@ -76,7 +77,15 @@ export async function createAuditLog(
           input.requestId ?? requestContext.requestId,
       },
     });
-  } catch (error) {
-    console.error("Falha ao registrar auditoria:", error);
+    } catch (error) {
+    await captureAppError(error, {
+      source: "audit-log",
+      severity: "CRITICAL",
+      clientId: input.clientId,
+      userId: input.actorId,
+      metadata: {
+        action: input.action,
+      },
+    });
   }
 }
