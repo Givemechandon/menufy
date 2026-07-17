@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createAuditLog } from "@/lib/audit";
 import {
+  getTenantFilter,
   resolveClientId,
   type TenantUser,
 } from "@/lib/auth/tenant";
@@ -227,4 +228,309 @@ export async function createMenuForUser(
   throw new Error(
     "Não foi possível criar o cardápio.",
   );
+}
+
+const updateMenuSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(2, "Informe o nome do cardápio.")
+      .max(80, "O nome é muito longo.")
+      .optional(),
+
+    slug: z
+      .string()
+      .trim()
+      .min(3, "O endereço é muito curto.")
+      .max(80, "O endereço é muito longo.")
+      .optional(),
+
+    description: z
+      .string()
+      .trim()
+      .max(500, "A descrição é muito longa.")
+      .nullable()
+      .optional(),
+
+    theme: z
+      .enum(["LIGHT", "DARK"])
+      .optional(),
+
+    primaryColor: z
+      .union([
+        z
+          .string()
+          .regex(
+            /^#[0-9A-Fa-f]{6}$/,
+            "Informe uma cor hexadecimal válida.",
+          ),
+        z.null(),
+      ])
+      .optional(),
+  })
+  .strict()
+  .refine(
+    (data) =>
+      Object.values(data).some(
+        (value) => value !== undefined,
+      ),
+    {
+      message: "Nenhuma alteração foi informada.",
+    },
+  );
+
+export class MenuNotFoundError extends Error {
+  readonly statusCode = 404;
+
+  constructor() {
+    super("Cardápio não encontrado.");
+    this.name = "MenuNotFoundError";
+  }
+}
+
+export class MenuCannotBePublishedError extends Error {
+  readonly statusCode = 409;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "MenuCannotBePublishedError";
+  }
+}
+
+export async function updateMenuForUser(
+  user: TenantUser,
+  menuId: string,
+  rawInput: unknown,
+) {
+  const input = updateMenuSchema.parse(rawInput);
+
+  const normalizedSlug = input.slug
+    ? normalizeSlug(input.slug)
+    : undefined;
+
+  if (
+    normalizedSlug !== undefined &&
+    normalizedSlug.length < 3
+  ) {
+    throw new Error(
+      "O endereço informado não gera um slug válido.",
+    );
+  }
+
+  try {
+    const menu = await prisma.$transaction(
+      async (transaction) => {
+        const existingMenu =
+          await transaction.menu.findFirst({
+            where: {
+              id: menuId,
+              ...getTenantFilter(user),
+            },
+          });
+
+        if (!existingMenu) {
+          throw new MenuNotFoundError();
+        }
+
+        if (normalizedSlug) {
+          const slugInUse =
+            await transaction.menu.findFirst({
+              where: {
+                slug: normalizedSlug,
+                id: {
+                  not: menuId,
+                },
+              },
+              select: {
+                id: true,
+              },
+            });
+
+          if (slugInUse) {
+            throw new MenuSlugAlreadyExistsError();
+          }
+        }
+
+        return transaction.menu.update({
+          where: {
+            id: existingMenu.id,
+          },
+          data: {
+            ...(input.name !== undefined && {
+              name: input.name,
+            }),
+
+            ...(normalizedSlug !== undefined && {
+              slug: normalizedSlug,
+            }),
+
+            ...(input.description !== undefined && {
+              description:
+                input.description || null,
+            }),
+
+            ...(input.theme !== undefined && {
+              theme: input.theme,
+            }),
+
+            ...(input.primaryColor !== undefined && {
+              primaryColor: input.primaryColor,
+            }),
+          },
+        });
+      },
+    );
+
+    await createAuditLog({
+      action: "MENU_UPDATED",
+      status: "SUCCESS",
+      severity: "INFO",
+      entityType: "Menu",
+      entityId: menu.id,
+      actorId: user.id,
+      clientId: menu.clientId,
+      description: "Cardápio atualizado.",
+      metadata: {
+        changedFields:
+          Object.keys(input).join(","),
+      },
+    });
+
+    return menu;
+  } catch (error) {
+    if (getErrorCode(error) === "P2002") {
+      throw new MenuSlugAlreadyExistsError();
+    }
+
+    throw error;
+  }
+}
+
+export async function publishMenuForUser(
+  user: TenantUser,
+  menuId: string,
+) {
+  const menu = await prisma.$transaction(
+    async (transaction) => {
+      const existingMenu =
+        await transaction.menu.findFirst({
+          where: {
+            id: menuId,
+            ...getTenantFilter(user),
+          },
+        });
+
+      if (!existingMenu) {
+        throw new MenuNotFoundError();
+      }
+
+      if (existingMenu.status === "PUBLISHED") {
+        return existingMenu;
+      }
+
+      if (existingMenu.status === "ARCHIVED") {
+        throw new MenuCannotBePublishedError(
+          "Um cardápio arquivado não pode ser publicado.",
+        );
+      }
+
+      const [
+        visibleCategories,
+        visibleProducts,
+      ] = await Promise.all([
+        transaction.menuCategory.count({
+          where: {
+            menuId: existingMenu.id,
+            isVisible: true,
+          },
+        }),
+
+        transaction.menuProduct.count({
+          where: {
+            menuId: existingMenu.id,
+            isVisible: true,
+          },
+        }),
+      ]);
+
+      if (visibleCategories === 0) {
+        throw new MenuCannotBePublishedError(
+          "Adicione ao menos uma categoria visível.",
+        );
+      }
+
+      if (visibleProducts === 0) {
+        throw new MenuCannotBePublishedError(
+          "Adicione ao menos um produto visível.",
+        );
+      }
+
+      return transaction.menu.update({
+        where: {
+          id: existingMenu.id,
+        },
+        data: {
+          status: "PUBLISHED",
+          publishedAt: new Date(),
+        },
+      });
+    },
+  );
+
+  await createAuditLog({
+    action: "MENU_PUBLISHED",
+    status: "SUCCESS",
+    severity: "INFO",
+    entityType: "Menu",
+    entityId: menu.id,
+    actorId: user.id,
+    clientId: menu.clientId,
+    description: "Cardápio publicado.",
+  });
+
+  return menu;
+}
+
+export async function archiveMenuForUser(
+  user: TenantUser,
+  menuId: string,
+) {
+  const existingMenu =
+    await prisma.menu.findFirst({
+      where: {
+        id: menuId,
+        ...getTenantFilter(user),
+      },
+    });
+
+  if (!existingMenu) {
+    throw new MenuNotFoundError();
+  }
+
+  if (existingMenu.status === "ARCHIVED") {
+    return existingMenu;
+  }
+
+  const menu = await prisma.menu.update({
+    where: {
+      id: existingMenu.id,
+    },
+    data: {
+      status: "ARCHIVED",
+    },
+  });
+
+  await createAuditLog({
+    action: "MENU_ARCHIVED",
+    status: "SUCCESS",
+    severity: "INFO",
+    entityType: "Menu",
+    entityId: menu.id,
+    actorId: user.id,
+    clientId: menu.clientId,
+    description: "Cardápio arquivado.",
+  });
+
+  return menu;
 }
