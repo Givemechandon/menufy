@@ -23,6 +23,18 @@ enum UserRole {
   CLIENT_ADMIN
 }
 
+enum AuditStatus {
+  SUCCESS
+  FAILURE
+}
+
+enum AuditSeverity {
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
+}
+
 model Plan {
   id         String   @id @default(cuid())
   name       String
@@ -48,6 +60,8 @@ model Client {
   categories Category[]
   products   Product[]
   users      User[]
+  auditLogs  AuditLog[]
+  errorLogs  ErrorLog[]
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 
@@ -56,17 +70,19 @@ model Client {
 }
 
 model User {
-  id           String    @id @default(cuid())
+  id           String     @id @default(cuid())
   name         String
-  email        String    @unique
+  email        String     @unique
   passwordHash String
-  role         UserRole  @default(CLIENT_ADMIN)
-  isActive     Boolean   @default(true)
+  role         UserRole   @default(CLIENT_ADMIN)
+  isActive     Boolean    @default(true)
   clientId     String?
-  client       Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  client       Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  auditLogs    AuditLog[]
+  errorLogs    ErrorLog[]
   lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   @@index([clientId])
   @@index([role])
@@ -159,4 +175,59 @@ model MenuProduct {
   @@id([menuId, productId])
   @@index([productId])
   @@map("menu_products")
+}
+
+model AuditLog {
+  id          String        @id @default(cuid())
+  action      String
+  status      AuditStatus   @default(SUCCESS)
+  severity    AuditSeverity @default(INFO)
+  entityType  String?
+  entityId    String?
+  description String?
+  metadata    Json?
+  ipAddress   String?
+  userAgent   String?
+  requestId   String?
+  clientId    String?
+  client      Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  actorId     String?
+  actor       User?         @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now())
+
+  @@index([clientId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model ErrorLog {
+  id          String        @id @default(cuid())
+  severity    AuditSeverity @default(ERROR)
+  source      String
+  message     String
+  stack       String?
+  code        String?
+  route       String?
+  method      String?
+  requestId   String?
+  environment String
+  release     String?
+  ipAddress   String?
+  userAgent   String?
+  clientId    String?
+  client      Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  userId      String?
+  user        User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  metadata    Json?
+  resolvedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([severity, createdAt])
+  @@index([clientId, createdAt])
+  @@index([userId, createdAt])
+  @@index([resolvedAt, createdAt])
+  @@map("error_logs")
 }

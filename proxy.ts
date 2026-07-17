@@ -4,10 +4,37 @@ function requireAuthentication() {
   return new NextResponse("Autenticação necessária.", {
     status: 401,
     headers: {
-      "WWW-Authenticate": 'Basic realm="MenuFy privado", charset="UTF-8"',
-      "Cache-Control": "no-store",
+      "WWW-Authenticate":
+        'Basic realm="MenuFy privado", charset="UTF-8"',
+      "Cache-Control": "private, no-store, max-age=0",
+      Vary: "Authorization",
     },
   });
+}
+
+function protectionNotConfigured() {
+  return new NextResponse(
+    "Proteção do site não configurada.",
+    {
+      status: 503,
+      headers: {
+        "Cache-Control": "private, no-store, max-age=0",
+      },
+    },
+  );
+}
+
+function allowPrivateRequest() {
+  const response = NextResponse.next();
+
+  response.headers.set(
+    "Cache-Control",
+    "private, no-store, max-age=0",
+  );
+
+  response.headers.append("Vary", "Authorization");
+
+  return response;
 }
 
 export function proxy(request: NextRequest) {
@@ -15,12 +42,11 @@ export function proxy(request: NextRequest) {
   const expectedPassword = process.env.SITE_PASSWORD;
 
   if (!expectedUsername || !expectedPassword) {
-    return new NextResponse("Proteção do site não configurada.", {
-      status: 503,
-    });
+    return protectionNotConfigured();
   }
 
-  const authorization = request.headers.get("authorization");
+  const authorization =
+    request.headers.get("authorization");
 
   if (!authorization?.startsWith("Basic ")) {
     return requireAuthentication();
@@ -34,14 +60,20 @@ export function proxy(request: NextRequest) {
       return requireAuthentication();
     }
 
-    const username = credentials.slice(0, separatorIndex);
-    const password = credentials.slice(separatorIndex + 1);
+    const username = credentials.slice(
+      0,
+      separatorIndex,
+    );
+
+    const password = credentials.slice(
+      separatorIndex + 1,
+    );
 
     if (
       username === expectedUsername &&
       password === expectedPassword
     ) {
-      return NextResponse.next();
+      return allowPrivateRequest();
     }
   } catch {
     return requireAuthentication();
