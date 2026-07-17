@@ -6,7 +6,9 @@ import { PrismaClient } from "../app/generated/prisma/client";
 const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
-  throw new Error("DATABASE_URL não foi configurada.");
+  throw new Error(
+    "DATABASE_URL não foi configurada.",
+  );
 }
 
 const adapter = new PrismaNeon({
@@ -40,33 +42,69 @@ async function createPlans() {
       where: {
         slug: plan.slug,
       },
-      update: {},
+      update: {
+        name: plan.name,
+        maxMenus: plan.maxMenus,
+        priceCents: plan.priceCents,
+        isActive: plan.isActive,
+      },
       create: plan,
     });
   }
 }
 
 async function createSuperAdmin() {
-  const name = process.env.SEED_ADMIN_NAME;
-  const email = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
-  const password = process.env.SEED_ADMIN_PASSWORD;
+  const name =
+    process.env.SEED_ADMIN_NAME?.trim();
+
+  const email =
+    process.env.SEED_ADMIN_EMAIL
+      ?.trim()
+      .toLowerCase();
+
+  const password =
+    process.env.SEED_ADMIN_PASSWORD;
 
   if (!name || !email || !password) {
-    throw new Error("As variáveis do Super Admin não foram configuradas.");
+    throw new Error(
+      "As variáveis do Super Admin não foram configuradas.",
+    );
   }
 
-  const existingUser = await prisma.user.findUnique({
-    where: {
-      email,
-    },
-  });
+  if (password.length < 12) {
+    throw new Error(
+      "A senha inicial do Super Admin precisa ter pelo menos 12 caracteres.",
+    );
+  }
+
+  const existingUser =
+    await prisma.user.findUnique({
+      where: {
+        email,
+      },
+    });
 
   if (existingUser) {
-    console.log("Super Admin já existe. Nenhuma alteração foi realizada.");
+    if (
+      existingUser.role !== "SUPER_ADMIN" ||
+      existingUser.clientId !== null
+    ) {
+      throw new Error(
+        "O e-mail informado já pertence a um usuário que não é Super Admin.",
+      );
+    }
+
+    console.log(
+      "Super Admin já existe. Nenhuma alteração foi realizada.",
+    );
+
     return;
   }
 
-  const passwordHash = await hash(password, 12);
+  const passwordHash = await hash(
+    password,
+    12,
+  );
 
   await prisma.user.create({
     data: {
@@ -74,11 +112,14 @@ async function createSuperAdmin() {
       email,
       passwordHash,
       role: "SUPER_ADMIN",
+      clientId: null,
       isActive: true,
     },
   });
 
-  console.log("Super Admin criado com sucesso.");
+  console.log(
+    "Super Admin criado com sucesso.",
+  );
 }
 
 async function main() {
